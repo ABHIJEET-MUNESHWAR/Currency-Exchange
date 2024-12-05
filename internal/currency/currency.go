@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 )
 
 type Currency struct {
@@ -14,6 +15,7 @@ type Currency struct {
 }
 
 type MyCurrencyExchange struct {
+	sync.Mutex
 	Currencies map[string]Currency
 }
 

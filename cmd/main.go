@@ -3,9 +3,24 @@ package main
 import (
 	"fmt"
 	"github.com/ABHIJEET-MUNESHWAR/Currency-Exchange/internal/currency"
-	"sync"
 	"time"
 )
+
+func runCurrencyWorker(
+	workerId int,
+	currencyChan <-chan currency.Currency,
+	resultChan chan<- currency.Currency) {
+	fmt.Printf("Worker %d started\n", workerId)
+	for c := range currencyChan {
+		rates, err := currency.FetchCurrencyRates(c.Code)
+		if err != nil {
+			panic(err)
+		}
+		c.Rates = rates
+		resultChan <- c
+	}
+	fmt.Printf("Worker %d stopped", workerId)
+}
 
 func main() {
 	ce := &currency.MyCurrencyExchange{
@@ -16,26 +31,35 @@ func main() {
 		panic(err)
 	}
 
-	wg := sync.WaitGroup{}
+	currencyChan := make(chan currency.Currency, len(ce.Currencies))
+	resultChan := make(chan currency.Currency, len(ce.Currencies))
+
+	for i := 0; i < 5; i++ {
+		go runCurrencyWorker(i, currencyChan, resultChan)
+	}
 	startTime := time.Now()
 
-	for code := range ce.Currencies {
-		wg.Add(1)
-		go func(code string) {
-			rates, err := currency.FetchCurrencyRates(code)
-			if err != nil {
-				panic(err)
-			}
-			ce.Currencies[code] = currency.Currency{
-				Code:  code,
-				Name:  ce.Currencies[code].Name,
-				Rates: rates,
-			}
-			wg.Done()
-		}(code)
+	resultCount := 0
 
+	for _, curr := range ce.Currencies {
+		currencyChan <- curr
 	}
-	wg.Wait()
+
+	for {
+		if resultCount == len(ce.Currencies) {
+			fmt.Println("Closing currencyChan")
+			close(currencyChan)
+			break
+		}
+		select {
+		case c := <-resultChan:
+			ce.Currencies[c.Code] = c
+			resultCount++
+		case <-time.After(3 * time.Second):
+			fmt.Println("Timeout")
+			break
+		}
+	}
 	endTime := time.Now()
 	fmt.Println("============== Results ==============")
 	for _, curr := range ce.Currencies {
