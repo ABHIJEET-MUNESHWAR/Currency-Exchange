@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/ABHIJEET-MUNESHWAR/Currency-Exchange/internal/currency"
+	"sync"
 	"time"
 )
 
@@ -14,19 +15,27 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	wg := sync.WaitGroup{}
 	startTime := time.Now()
 
 	for code := range ce.Currencies {
-		rates, err := currency.FetchCurrencyRates(code)
-		if err != nil {
-			panic(err)
-		}
-		ce.Currencies[code] = currency.Currency{
-			Code:  code,
-			Name:  ce.Currencies[code].Name,
-			Rates: rates,
-		}
+		wg.Add(1)
+		go func(code string) {
+			rates, err := currency.FetchCurrencyRates(code)
+			if err != nil {
+				panic(err)
+			}
+			ce.Currencies[code] = currency.Currency{
+				Code:  code,
+				Name:  ce.Currencies[code].Name,
+				Rates: rates,
+			}
+			wg.Done()
+		}(code)
+
 	}
+	wg.Wait()
 	endTime := time.Now()
 	fmt.Println("============== Results ==============")
 	for _, curr := range ce.Currencies {
